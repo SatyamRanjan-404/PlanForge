@@ -1,0 +1,16 @@
+{
+  "name": "autonomous-task-orchestration-platform",
+  "version": "1.0.0",
+  "description": "Multi-Agent Task Orchestrator",
+  "private": true,
+  "workspaces": [
+    "src/backend",
+    "src/frontend"
+  ],
+  "scripts": {
+    "start": "docker-compose up -d",
+    "stop": "docker-compose down"
+  },
+  "author": "",
+  "license": "ISC"
+}
