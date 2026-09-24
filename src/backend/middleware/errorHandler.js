@@ -1,7 +1,5 @@
-const logger = require('../utils/logger');
-
 const errorHandler = (err, req, res, next) => {
-    logger.error(`${err.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`, {
+    console.error(`${err.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`, {
         stack: err.stack
     });
     
@@ -17,4 +15,5 @@ const errorHandler = (err, req, res, next) => {
 };
 
 module.exports = errorHandler;
+
 

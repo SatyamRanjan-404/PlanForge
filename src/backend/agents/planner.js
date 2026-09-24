@@ -14,7 +14,7 @@ const llm = new ChatOpenAI({
     configuration: {
         baseURL: process.env.OPENAI_API_BASE || 'https://api.groq.com/openai/v1'
     },
-    modelName: 'llama-3.1-8b-instant', // Groq active model tag
+    modelName: 'openai/gpt-oss-20b',
     temperature: 0.1
 });
 
@@ -39,8 +39,12 @@ Objective: {objective}
 `);
 
 const runPlanner = async () => {
-    // Clone client because BRPOP blocks the thread for this specific connection
+    // Duplicate client because BRPOP blocks the connection for this agent only
     const subscriber = redisClient.duplicate();
+    // Prevent unhandled 'error' event from crashing the worker process on ECONNRESET
+    subscriber.on('error', (err) => {
+        console.error(`[Planner] Subscriber connection error: ${err.message}`);
+    });
     await subscriber.connect();
 
     console.log(`Planner Agent daemon listening on ${AgentRegistry.PLANNER.queueName}...`);
@@ -93,6 +97,7 @@ const runPlanner = async () => {
                 task.metadata.subtasks = parsedResult.subtasks;
                 task.status = 'EXECUTING';
                 task.assignedAgent = AgentRegistry.EXECUTOR.id;
+                task.markModified('metadata');
                 await task.save();
 
                 // Dispatch to Executor Queue

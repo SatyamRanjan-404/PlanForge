@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const TaskSchema = new mongoose.Schema({
   userId: {
-    type: String, // UUID from Supabase Auth
+    type: String,
     required: true,
   },
   originalPrompt: {

@@ -11,20 +11,26 @@ const llm = new ChatOpenAI({
     configuration: {
         baseURL: process.env.OPENAI_API_BASE || 'https://api.groq.com/openai/v1'
     },
-    modelName: 'llama-3.1-8b-instant',
+    modelName: 'openai/gpt-oss-20b',
     temperature: 0.3
 });
 
-const executorPrompt = PromptTemplate.fromTemplate(`
-You are a highly capable AI Executor.
-Your job is to execute the following subtask to the best of your ability.
-Return a concise summary of what you did and the result.
-
-Subtask: {subtask}
-`);
+const searchWikipedia = async (topic) => {
+    try {
+        const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.extract || null;
+    } catch (e) {
+        return null;
+    }
+};
 
 const runExecutor = async () => {
     const subscriber = redisClient.duplicate();
+    subscriber.on('error', (err) => {
+        console.error(`[Executor] Subscriber connection error: ${err.message}`);
+    });
     await subscriber.connect();
 
     console.log(`Executor Agent daemon listening on ${AgentRegistry.EXECUTOR.queueName}...`);
@@ -48,7 +54,34 @@ const runExecutor = async () => {
                     console.log(`[Executor] Found cached context:`, previousContext.lastAction);
                 }
 
-                // Execute LangChain
+                // Grounding via Wikipedia tool call
+                let wikiContext = null;
+                try {
+                    const topicRes = await llm.invoke(`Extract the single core topic or main keyword of this subtask to look up on Wikipedia. Return ONLY the keyword/topic text:\nSubtask: ${payload.description}`);
+                    const topic = topicRes.content ? topicRes.content.trim() : payload.description;
+                    wikiContext = await searchWikipedia(topic);
+                } catch (e) {
+                    wikiContext = null;
+                }
+
+                const safeWiki = wikiContext ? wikiContext.replace(/\{/g, '{{').replace(/\}/g, '}}') : '';
+                const safeLastError = payload.lastError ? payload.lastError.replace(/\{/g, '{{').replace(/\}/g, '}}') : '';
+
+                let promptText = "";
+                if (safeWiki) {
+                    promptText += `Reference material (from Wikipedia): ${safeWiki}\n\n`;
+                }
+                promptText += `Subtask: {subtask}\n\n`;
+                if (safeWiki) {
+                    promptText += `Using the reference material where relevant, execute this subtask and summarize what you found.`;
+                } else {
+                    promptText += `Execute this subtask to the best of your ability and return a concise summary of what you did and the result.`;
+                }
+                if (safeLastError) {
+                    promptText += `\n\nNote: a previous attempt at this subtask was rejected for this reason: ${safeLastError}. Address this in your new attempt.`;
+                }
+
+                const executorPrompt = PromptTemplate.fromTemplate(`You are a highly capable AI Executor.\n\n${promptText}`);
                 const chain = executorPrompt.pipe(llm);
                 const response = await chain.invoke({ subtask: payload.description });
                 
@@ -82,3 +115,4 @@ const runExecutor = async () => {
 };
 
 module.exports = runExecutor;
+

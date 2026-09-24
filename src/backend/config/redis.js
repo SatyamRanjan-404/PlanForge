@@ -1,33 +1,33 @@
 const { createClient } = require('redis');
-const logger = require('../utils/logger');
 
 const redisClient = createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379',
   socket: {
     reconnectStrategy(retries) {
-      if (retries > 10) {
-        logger.error('Too many attempts to reconnect. Redis connection failed.');
-        return new Error('Too many retries.');
+      // Exponential backoff: 100ms, 200ms, 400ms ... capped at 5s
+      // Never return an Error — always retry so the server stays alive
+      const delay = Math.min(100 * Math.pow(2, retries), 5000);
+      if (retries % 5 === 0) {
+        console.warn(`Redis reconnect attempt #${retries}, next retry in ${delay}ms`);
       }
-      // Reconnect after
-      const delay = Math.min(retries * 50, 2000);
       return delay;
     }
   }
 });
 
-redisClient.on('error', (err) => logger.error(`Redis Client Error: ${err.message}`));
-redisClient.on('connect', () => logger.info('Redis Client Connected'));
-redisClient.on('ready', () => logger.info('Redis Client Ready'));
-redisClient.on('reconnecting', () => logger.warn('Redis Client Reconnecting...'));
-redisClient.on('end', () => logger.warn('Redis Client connection closed.'));
+redisClient.on('error', (err) => console.error(`Redis Client Error: ${err.message}`));
+redisClient.on('connect', () => console.log('Redis Client Connected'));
+redisClient.on('ready', () => console.log('Redis Client Ready'));
+redisClient.on('reconnecting', () => console.warn('Redis Client Reconnecting...'));
+redisClient.on('end', () => console.warn('Redis Client connection closed.'));
 
 const connectRedis = async () => {
     try {
         await redisClient.connect();
     } catch(err) {
-        logger.error(`Initial Redis connection failed: ${err.message}`);
+        console.error(`Initial Redis connection failed: ${err.message}`);
     }
 }
 
 module.exports = { redisClient, connectRedis };
+

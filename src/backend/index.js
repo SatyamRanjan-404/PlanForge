@@ -2,14 +2,12 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
 
 const connectDB = require('./config/db');
 const { connectRedis } = require('./config/redis');
 const healthRoutes = require('./routes/health');
 const taskRoutes = require('./routes/tasks');
 
-const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
 const { globalLimiter } = require('./middleware/rateLimiter');
 
@@ -17,11 +15,11 @@ const app = express();
 
 // Global Exception Process Handlers
 process.on('uncaughtException', (err) => {
-  logger.error(`Uncaught Exception: ${err.message}`, { stack: err.stack });
+  console.error(`Uncaught Exception: ${err.message}`, err.stack);
 });
 
 process.on('unhandledRejection', (reason) => {
-  logger.error(`Unhandled Rejection: ${reason}`);
+  console.error(`Unhandled Rejection: ${reason}`);
 });
 
 // Security Headers
@@ -29,14 +27,12 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Request Logging via Winston
-app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
 app.use(express.json());
 
 // Strict CORS Lockdown for allowed origins
 const allowedOrigins = process.env.FRONTEND_CLIENT_URL
   ? process.env.FRONTEND_CLIENT_URL.split(',').map(url => url.trim())
-  : ['http://localhost:3000', 'http://localhost:5173'];
+  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'];
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -72,7 +68,7 @@ const startServer = async () => {
     await connectRedis();
 
     app.listen(PORT, () => {
-        logger.info(`Orchestrator Backend running on port ${PORT}`);
+        console.log(`Orchestrator Backend running on port ${PORT}`);
     });
 };
 
@@ -81,4 +77,5 @@ if (require.main === module) {
 }
 
 module.exports = app;
+
 

@@ -2,7 +2,7 @@ const rateLimit = require('express-rate-limit');
 
 const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per `window`
+    max: 2000, // Limit each IP to 2000 requests per `window` (dashboard polls every 2s)
     message: { success: false, error: 'Too many requests from this IP, please try again later.' },
     standardHeaders: true, 
     legacyHeaders: false, 

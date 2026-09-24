@@ -1,27 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TaskSubmit from './TaskSubmit';
 import TaskDetail from './TaskDetail';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const Dashboard = () => {
   const [tasks, setTasks] = useState([]);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [dbStatus, setDbStatus] = useState('connected'); // 'connected' | 'reconnecting' | 'offline'
+  const consecutiveFailsRef = useRef(0);
 
   const fetchTasks = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/tasks`);
+      const res = await fetch(`${API_URL}/tasks`);
+
       if (res.ok) {
         const data = await res.json();
         setTasks(data);
+        consecutiveFailsRef.current = 0;
+        setDbStatus('connected');
+      } else if (res.status === 503) {
+        // DB is temporarily reconnecting — keep stale data visible
+        consecutiveFailsRef.current += 1;
+        setDbStatus(consecutiveFailsRef.current > 3 ? 'offline' : 'reconnecting');
       }
     } catch (err) {
-      console.error('Failed to fetch tasks', err);
+      // Network-level error (server fully down)
+      consecutiveFailsRef.current += 1;
+      setDbStatus('offline');
     }
   };
 
-  // Short Polling implementation (pings REST API every 2 seconds)
+  // Poll every 5 seconds — fast enough to feel live, slow enough not to hammer the DB
   useEffect(() => {
-    fetchTasks(); // initial fetch
-    const interval = setInterval(fetchTasks, 2000);
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -29,15 +42,30 @@ const Dashboard = () => {
 
   return (
     <div className="app-container">
-      <h1 className="header-title">Nexus Orchestrator</h1>
-      <p className="header-subtitle">Multi-Agent State Machine & Live Execution Tracker</p>
+      <h1 className="header-title">PlanForge Orchestrator</h1>
+      <p className="header-subtitle">Multi-Agent State Machine &amp; Live Execution Tracker</p>
+
+      {/* DB Connection Status Banner */}
+      {dbStatus !== 'connected' && (
+        <div className={`connection-banner ${dbStatus}`}>
+          <span className="connection-dot"></span>
+          {dbStatus === 'reconnecting'
+            ? 'Reconnecting to database — task list is temporarily paused…'
+            : 'Database offline — check your connection or MongoDB Atlas whitelist.'}
+        </div>
+      )}
 
       <TaskSubmit onTaskSubmitted={fetchTasks} />
 
       <div className="dashboard-grid">
         <div className="glass-panel tasks-list">
-          <h2 className="section-title">Queue History</h2>
-          {tasks.length === 0 && <p className="no-selection">No tasks found. Dispatch one above!</p>}
+          <h2 className="section-title">
+            Queue History
+            {dbStatus === 'connected' && <span className="live-dot" title="Live"></span>}
+          </h2>
+          {tasks.length === 0 && dbStatus === 'connected' && (
+            <p className="no-selection">No tasks found. Dispatch one above!</p>
+          )}
           
           {tasks.map(task => (
             <div 
